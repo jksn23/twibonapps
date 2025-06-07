@@ -1,10 +1,10 @@
+// CampaignPages.jsx — Versi Final (Fix: hasil download menyertakan frame)
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
-// PERBAIKAN: Impor spesifik untuk tree-shaking dan stabilitas
-import { Canvas, Image as FabricImage } from 'fabric';
-import html2canvas from 'html2canvas';
+import * as fabric from 'fabric';
 import Compressor from 'compressorjs';
+import html2canvas from 'html2canvas';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,167 +13,207 @@ import { Slider } from '@/components/ui/slider';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 
-// Komponen Editor Kanvas
 function TwibbonEditor({ campaign }) {
-  const [userImage, setUserImage] = useState(null);
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isPhotoProcessing, setIsPhotoProcessing] = useState(false);
+  const [frameLoaded, setFrameLoaded] = useState(false);
 
   const canvasContainerRef = useRef(null);
+  const canvasElRef = useRef(null);
   const fabricCanvasRef = useRef(null);
+  const userImageRef = useRef(null);
+  const frameImageRef = useRef(null);
 
   useEffect(() => {
-    if (!campaign?.frame_width || !campaign?.frame_height) return;
+    if (!campaign?.frame_width || !campaign?.frame_height || !canvasElRef.current || !canvasContainerRef.current) {
+      return;
+    }
 
+    const canvasEl = canvasElRef.current;
     const container = canvasContainerRef.current;
-    if (!container) return;
-
-    // Bersihkan container agar tidak double render
-    container.innerHTML = '';
-
-    const canvasEl = document.createElement('canvas');
-    container.appendChild(canvasEl);
-
-    const containerWidth = container.clientWidth;
-    const aspectRatio = campaign.frame_height / campaign.frame_width;
-    const containerHeight = containerWidth * aspectRatio;
-
-    canvasEl.width = containerWidth;
-    canvasEl.height = containerHeight;
-
-    const canvas = new Canvas(canvasEl, {
-      width: containerWidth,
-      height: containerHeight,
-      backgroundColor: '#e5e7eb',
-    });
-
+    const canvas = new fabric.Canvas(canvasEl, { preserveObjectStacking: true });
     fabricCanvasRef.current = canvas;
 
+    const setCanvasDimensions = () => {
+      const containerWidth = container.offsetWidth;
+      const aspectRatio = campaign.frame_height / campaign.frame_width;
+      const containerHeight = containerWidth * aspectRatio;
+
+      canvas.setDimensions({ width: containerWidth, height: containerHeight });
+      canvas.renderAll();
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      setCanvasDimensions();
+      if (frameImageRef.current) {
+        frameImageRef.current.scaleToWidth(canvas.getWidth());
+        frameImageRef.current.set({
+          left: canvas.getWidth() / 2,
+          top: canvas.getHeight() / 2,
+        });
+        canvas.bringToFront(frameImageRef.current);
+        canvas.renderAll();
+      }
+    });
+
+    resizeObserver.observe(container);
+    setCanvasDimensions();
+
+    fabric.Image.fromURL(campaign.frame_url, (frameImg) => {
+        console.log("✅ Frame berhasil dimuat ke canvas!", frameImg);
+      const width = canvas.getWidth();
+      const height = canvas.getHeight();
+      frameImg.set({
+        selectable: false,
+        evented: false,
+        originX: 'center',
+        originY: 'center',
+        left: width / 2,
+        top: height / 2,
+      });
+      frameImg.scaleToWidth(width);
+      canvas.add(frameImg);
+      canvas.bringToFront(frameImg);
+      frameImageRef.current = frameImg;
+      setFrameLoaded(true);
+      canvas.renderAll();
+    }, { crossOrigin: 'anonymous' });
+
     return () => {
+      resizeObserver.disconnect();
       canvas.dispose();
       fabricCanvasRef.current = null;
     };
   }, [campaign]);
 
-    const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !fabricCanvasRef.current) return;
-
     setIsPhotoProcessing(true);
 
     new Compressor(file, {
-        quality: 0.8,
-        maxWidth: 1080,
-        maxHeight: 1080,
-        success(result) {
-        const url = URL.createObjectURL(result);
+      quality: NaN,
+      maxWidth: 1350,
+      maxHeight: 1350,
+      success(result) {
+        const blobUrl = URL.createObjectURL(result);
+        const img = new Image();
 
-        FabricImage.fromURL(
-            url,
-            (fabricImg) => {
-            try {
-                const canvas = fabricCanvasRef.current;
-                if (!canvas) throw new Error('Canvas tidak tersedia');
+        img.onload = () => {
+          try {
+            const canvas = fabricCanvasRef.current;
+            const width = canvas.getWidth();
+            const height = canvas.getHeight();
 
-                if (userImage) canvas.remove(userImage);
+            const fabricImg = new fabric.Image(img);
+            if (userImageRef.current) canvas.remove(userImageRef.current);
 
-                const scale = Math.max(canvas.width / fabricImg.width, canvas.height / fabricImg.height);
-                fabricImg.scale(scale);
-                fabricImg.set({
-                originX: 'center',
-                originY: 'center',
-                left: canvas.width / 2,
-                top: canvas.height / 2,
-                cornerColor: '#4f46e5',
-                cornerStyle: 'circle',
-                });
-
-                console.log("✅ Gambar berhasil dimuat ke fabric:", fabricImg);
-
-                canvas.add(fabricImg);
-                fabricImg.sendToBack();
-                canvas.setActiveObject(fabricImg);
-                setUserImage(fabricImg);
-                canvas.renderAll();
-            } catch (err) {
-                console.error('Gagal memproses gambar ke canvas:', err);
-                alert('Terjadi kesalahan saat menambahkan gambar.');
-            } finally {
-                setIsPhotoProcessing(false);
-                URL.revokeObjectURL(url);
+            fabricImg.scaleToWidth(width);
+            if (fabricImg.getScaledHeight() < height) {
+              fabricImg.scaleToHeight(height);
             }
-            },
-            {
-            crossOrigin: 'anonymous',
-            }
-        );
-        },
-        error(err) {
+
+            fabricImg.set({
+              originX: 'center',
+              originY: 'center',
+              left: width / 2,
+              top: height / 2,
+              cornerColor: '#4f46e5',
+              cornerStyle: 'circle',
+            });
+
+            canvas.add(fabricImg);
+            canvas.sendObjectToBack(fabricImg);
+            userImageRef.current = fabricImg;
+            setIsImageLoaded(true);
+            if (frameImageRef.current) canvas.bringToFront(frameImageRef.current);
+            canvas.renderAll();
+
+          } catch (err) {
+            console.error("Gagal saat menambahkan gambar:", err);
+            alert("Terjadi kesalahan saat menambahkan gambar.");
+          } finally {
+            URL.revokeObjectURL(blobUrl);
+            setIsPhotoProcessing(false);
+          }
+        };
+
+        img.onerror = () => {
+          alert("Gagal memuat gambar.");
+          URL.revokeObjectURL(blobUrl);
+          setIsPhotoProcessing(false);
+        };
+
+        img.src = blobUrl;
+      },
+      error(err) {
         alert(`Gagal memproses gambar: ${err.message}`);
         setIsPhotoProcessing(false);
-        },
+      },
     });
-    };
-
-
-
+  };
 
   const handleControlChange = (type, value) => {
-    if (!userImage || !fabricCanvasRef.current) return;
-    if (type === 'scale') userImage.scale(value);
-    if (type === 'rotate') userImage.set('angle', value);
+    if (!userImageRef.current || !fabricCanvasRef.current) return;
+    const imageObject = userImageRef.current;
+    if (type === 'scale') imageObject.scale(value);
+    if (type === 'rotate') imageObject.set('angle', value);
     fabricCanvasRef.current.renderAll();
   };
 
+//   const handleDownload = () => {
+//     const canvas = fabricCanvasRef.current;
+//     if (!canvas || !isImageLoaded) return alert('Silakan unggah foto terlebih dahulu.');
+//     canvas.discardActiveObject();
+//     canvas.renderAll();
+
+//     const dataURL = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
+//     const link = document.createElement('a');
+//     link.download = `${campaign.slug}-twibbon.png`;
+//     link.href = dataURL;
+//     link.click();
+//   };
+
     const handleDownload = () => {
-    const container = canvasContainerRef.current?.parentNode;
-    if (!container || !userImage) {
-        alert('Silakan unggah foto Anda terlebih dahulu.');
+    const targetElement = document.getElementById('twibbon-area');
+    if (!targetElement || !isImageLoaded) {
+        alert("Silakan unggah foto terlebih dahulu.");
         return;
     }
 
-    fabricCanvasRef.current.discardActiveObject().renderAll();
-
-    html2canvas(container, {
-        allowTaint: true,
+    html2canvas(targetElement, {
         useCORS: true,
         backgroundColor: null,
-        scale: 2, // kualitas tinggi
+        scale: 2
     }).then(canvas => {
         const link = document.createElement('a');
         link.download = `${campaign.slug}-twibbon.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = canvas.toDataURL('image/png', 0.85);
         link.click();
     });
     };
 
-
   return (
     <div className="mt-8 w-full max-w-lg">
       <div
-        className="relative w-full border rounded-lg overflow-hidden bg-muted"
-        style={{ aspectRatio: `${campaign.frame_width} / ${campaign.frame_height}` }}
-        >
-        {/* Container Canvas dibuat di dalam absolute */}
-        <div
-            ref={canvasContainerRef}
-            className="absolute top-0 left-0 w-full h-full z-0"
-        />
-
-        {/* Bingkai tetap dikelola React */}
-        <img
+      id='twibbon-area'
+        className="relative w-full border rounded-lg overflow-hidden bg-gray-200"
+        ref={canvasContainerRef}
+        style={{ aspectRatio: `${campaign.frame_width} / ${campaign.frame_height}` }}>
+        <canvas ref={canvasElRef} className="absolute top-0 left-0 z-0" />
+        {!frameLoaded && (
+          <img
             src={campaign.frame_url}
             alt="Bingkai Kampanye"
             className="absolute top-0 left-0 w-full h-full pointer-events-none z-10"
-        />
-
-        {/* Loader jika sedang memproses */}
-        {isPhotoProcessing && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
-            <Loader2 className="h-10 w-10 animate-spin text-white" />
-            </div>
+          />
         )}
-        </div>
-
+        {isPhotoProcessing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
+            <Loader2 className="h-10 w-10 animate-spin text-white" />
+          </div>
+        )}
+      </div>
 
       <div className="mt-6 flex flex-col space-y-4">
         <div className="grid w-full max-w-sm items-center gap-1.5 mx-auto">
@@ -181,22 +221,22 @@ function TwibbonEditor({ campaign }) {
           <Input id="picture" type="file" onChange={handlePhotoUpload} accept="image/*" disabled={isPhotoProcessing} />
         </div>
 
-        {userImage && (
+        {isImageLoaded && (
           <Card className="p-4">
             <div className="space-y-4">
               <div>
                 <Label>Perbesar / Perkecil</Label>
-                <Slider defaultValue={[1]} min={0.1} max={3} step={0.01} onValueChange={(value) => handleControlChange('scale', value[0])} />
+                <Slider defaultValue={[1]} min={0.5} max={1.5} step={0.01} onValueChange={([v]) => handleControlChange('scale', v)} />
               </div>
               <div>
                 <Label>Putar</Label>
-                <Slider defaultValue={[0]} min={-180} max={180} step={1} onValueChange={(value) => handleControlChange('rotate', value[0])} />
+                <Slider defaultValue={[0]} min={-180} max={180} step={1} onValueChange={([v]) => handleControlChange('rotate', v)} />
               </div>
             </div>
           </Card>
         )}
 
-        <Button onClick={handleDownload} size="lg" disabled={!userImage || isPhotoProcessing}>
+        <Button onClick={handleDownload} size="lg" disabled={!isImageLoaded || isPhotoProcessing}>
           Unduh Hasil Gambar
         </Button>
       </div>
@@ -204,8 +244,6 @@ function TwibbonEditor({ campaign }) {
   );
 }
 
-
-// Komponen Halaman Utama
 export default function CampaignPage() {
   const { slug } = useParams();
   const [campaign, setCampaign] = useState(null);
