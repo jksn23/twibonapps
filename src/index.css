@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer base {
+  :root {
+    /* Ini adalah variabel untuk mode terang (jika nanti dibutuhkan) */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 243 80% 63%; /* Warna nila */
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 243 80% 63%; /* Cincin fokus warna nila */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Ini adalah variabel untuk tema gelap sesuai permintaan Anda */
+    --background: 222 47% 11%; /* #111827 */
+    --foreground: 215 14% 83%; /* #e5e7eb */
+
+    --card: 215 28% 17%; /* #1f2937 */
+    --card-foreground: 215 14% 83%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 215 14% 83%;
+
+    --primary: 243 80% 63%; /* #4f46e5 */
+    --primary-foreground: 215 14% 83%;
+
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 215 14% 83%;
+
+    --muted: 215 28% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 215 28% 17%;
+    --accent-foreground: 215 14% 83%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 215 14% 83%;
+
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 243 80% 63%; /* Cincin fokus warna nila */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
